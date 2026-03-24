@@ -57,3 +57,31 @@ In today’s fast-paced market, manual inventory tracking is a bottleneck. Our I
 git clone [https://github.com/linditamorina/InventoryManagementSystem.git](https://github.com/linditamorina/InventoryManagementSystem.git)
 cd inventory-system
 npm install
+
+2. Environment Configuration
+Create a .env.local file and populate it with your credentials:
+
+Code snippet
+NEXT_PUBLIC_SUPABASE_URL=your_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+OPENAI_API_KEY=your_api_key
+3. Launch
+Bash
+npm run dev
+🛡️ Git Workflow & Collaboration
+To ensure code quality and avoid conflicts, we strictly follow this workflow:
+
+Branching: Always create a feature branch (feat/your-task).
+
+Pull Requests: No direct pushes to main. All code requires TL approval.
+
+Syncing: Always run git pull origin main before starting your daily tasks.
+
+📅 Roadmap
+[ ] Sprint 1: Core Architecture & Authentication.
+
+[ ] Sprint 2: Product CRUD & Dashboard UI.
+
+[ ] Sprint 3: POS Module & AI Integration.
+
+[ ] Sprint 4: Analytics, Testing & Production Launch.
