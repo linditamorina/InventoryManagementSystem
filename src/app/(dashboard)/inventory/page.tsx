@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { 
   Package, Plus, Search, Filter, Edit3, Trash2, 
-  X, Loader2, CheckCircle, AlertTriangle, Trash 
+  X, Loader2, CheckCircle, AlertTriangle, Trash, Sparkles 
 } from 'lucide-react';
 import { 
   useProducts, 
@@ -25,6 +25,7 @@ export default function InventoryPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -32,9 +33,35 @@ export default function InventoryPage() {
     category: 'Pajisje',
     price: '',
     stock_quantity: '',
+    description: '',
+    min_stock_level: '2',
   });
 
-  // Funksioni për hapjen e modalit për Edit
+  // Funksioni për AI Description
+  const generateAIDescription = async () => {
+    if (!formData.name) return alert("Ju lutem shkruani emrin e produktit.");
+    
+    setIsGeneratingAI(true);
+    try {
+      const res = await fetch('/api/ai/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          productName: formData.name, 
+          category: formData.category 
+        }),
+      });
+      const data = await res.json();
+      if (data.description) {
+        setFormData(prev => ({ ...prev, description: data.description }));
+      }
+    } catch (error) {
+      console.error("Gabim gjatë gjenerimit me AI:", error);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
   const openEditModal = (product: any) => {
     setEditingProduct(product);
     setFormData({
@@ -43,6 +70,8 @@ export default function InventoryPage() {
       category: product.category || 'Pajisje',
       price: product.price?.toString() || '',
       stock_quantity: product.stock_quantity?.toString() || '',
+      description: product.description || '',
+      min_stock_level: product.min_stock_level?.toString() || '2',
     });
     setIsModalOpen(true);
   };
@@ -57,8 +86,9 @@ export default function InventoryPage() {
       category: formData.category,
       price: parseFloat(formData.price) || 0,
       stock_quantity: parseInt(formData.stock_quantity) || 0,
-      description: "", 
-      min_stock_level: 0,
+      description: formData.description, 
+      min_stock_level: parseInt(formData.min_stock_level) || 0,
+      quantity: parseInt(formData.stock_quantity) || 0, // Sinkronizim me kolonën 'quantity'
       category_id: null,
       image_url: ""
     };
@@ -72,13 +102,12 @@ export default function InventoryPage() {
       createMutation.mutate(productData as any, { 
         onSuccess: () => { 
           setIsModalOpen(false); 
-          setFormData({ name: '', sku: '', category: 'Pajisje', price: '', stock_quantity: '' });
+          setFormData({ name: '', sku: '', category: 'Pajisje', price: '', stock_quantity: '', description: '', min_stock_level: '2' });
         } 
       });
     }
   };
 
-  // Funksioni i ri i fshirjes me Modal
   const confirmDelete = () => {
     if (deleteId) {
       deleteMutation.mutate(deleteId, {
@@ -96,7 +125,7 @@ export default function InventoryPage() {
   );
 
   return (
-    <div className="p-4 md:p-8 space-y-8 animate-in fade-in duration-700 italic relative min-h-screen">
+    <div className="p-4 md:p-8 space-y-8 animate-in fade-in duration-700 italic relative min-h-screen font-medium">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
@@ -108,7 +137,7 @@ export default function InventoryPage() {
         </div>
 
         <button 
-          onClick={() => { setEditingProduct(null); setFormData({ name: '', sku: '', category: 'Pajisje', price: '', stock_quantity: '' }); setIsModalOpen(true); }}
+          onClick={() => { setEditingProduct(null); setFormData({ name: '', sku: '', category: 'Pajisje', price: '', stock_quantity: '', description: '', min_stock_level: '2' }); setIsModalOpen(true); }}
           className="bg-red-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-3 hover:bg-slate-900 transition-all shadow-2xl shadow-red-600/30 active:scale-95 border-2 border-red-600"
         >
           <Plus size={20} strokeWidth={3} /> Shto Produkt
@@ -159,7 +188,7 @@ export default function InventoryPage() {
                     <td className="p-8 font-bold text-slate-500 uppercase text-[10px]">{p.category}</td>
                     <td className="p-8 font-black text-slate-900">${p.price}</td>
                     <td className="p-8">
-                      <span className={`px-4 py-2 rounded-xl font-black text-xs ${p.stock_quantity <= 5 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-900'}`}>
+                      <span className={`px-4 py-2 rounded-xl font-black text-xs ${p.stock_quantity <= p.min_stock_level ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-900'}`}>
                         {p.stock_quantity} CP
                       </span>
                     </td>
@@ -178,41 +207,74 @@ export default function InventoryPage() {
       {/* MODAL SHTIM / EDITIM */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-            <div className="bg-[#1a1a1a] p-10 flex justify-between items-center text-white">
+          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+            <div className="bg-[#1a1a1a] p-10 flex justify-between items-center text-white border-b border-white/5">
               <div>
                 <h2 className="text-2xl font-black uppercase tracking-tighter">{editingProduct ? 'Edito Produktin' : 'Shto Produkt'}</h2>
                 <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Plotësoni të dhënat e stokut</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="bg-white/5 p-3 rounded-2xl hover:bg-red-600 transition-all"><X size={24}/></button>
             </div>
-            <form onSubmit={handleSubmit} className="p-10 space-y-6 font-bold">
+            
+            <form onSubmit={handleSubmit} className="p-10 space-y-6 font-bold overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-2 space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Emri i Produktit</label>
                   <input required type="text" value={formData.name} onChange={(e)=>setFormData({...formData, name: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
                 </div>
+
+                <div className="col-span-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Përshkrimi</label>
+                    <button 
+                      type="button"
+                      onClick={generateAIDescription}
+                      disabled={isGeneratingAI}
+                      className="text-[10px] flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full hover:bg-red-600 transition-all disabled:opacity-50"
+                    >
+                      {isGeneratingAI ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      Gjenero me AI
+                    </button>
+                  </div>
+                  <textarea 
+                    rows={3}
+                    value={formData.description} 
+                    onChange={(e)=>setFormData({...formData, description: e.target.value})} 
+                    className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all resize-none"
+                    placeholder="Përshkrim i shkurtër i produktit..."
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SKU</label>
                   <input required type="text" value={formData.sku} onChange={(e)=>setFormData({...formData, sku: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
                 </div>
+                
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kategoria</label>
                   <select value={formData.category} onChange={(e)=>setFormData({...formData, category: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all">
                     <option>Pajisje</option><option>Softuer</option><option>Aksesorë</option>
                   </select>
                 </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Çmimi ($)</label>
                   <input required type="number" step="0.01" value={formData.price} onChange={(e)=>setFormData({...formData, price: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sasia</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sasia aktuale</label>
                   <input required type="number" value={formData.stock_quantity} onChange={(e)=>setFormData({...formData, stock_quantity: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
                 </div>
+
+                <div className="col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-red-600 uppercase tracking-widest">Alarmi për Stok të Ulët (Limiti)</label>
+                  <input required type="number" value={formData.min_stock_level} onChange={(e)=>setFormData({...formData, min_stock_level: e.target.value})} className="w-full p-5 bg-red-50/50 border-2 border-red-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
+                </div>
               </div>
-              <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="w-full bg-red-600 text-white font-black py-6 rounded-[1.5rem] hover:bg-slate-900 transition-all uppercase tracking-[0.2em] flex items-center justify-center gap-3">
-                {createMutation.isPending || updateMutation.isPending ? <Loader2 className="animate-spin" /> : <><CheckCircle size={20}/> {editingProduct ? 'Përditëso' : 'Ruaj'}</>}
+
+              <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="w-full bg-red-600 text-white font-black py-6 rounded-[2rem] hover:bg-slate-900 transition-all uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-red-600/20">
+                {createMutation.isPending || updateMutation.isPending ? <Loader2 className="animate-spin" /> : <><CheckCircle size={20}/> {editingProduct ? 'Përditëso' : 'Ruaj Produktin'}</>}
               </button>
             </form>
           </div>
