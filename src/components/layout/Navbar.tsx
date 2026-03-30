@@ -100,10 +100,10 @@ export default function Navbar() {
         {/* PROFILE */}
         <div className="flex items-center gap-3 pl-4 border-l border-gray-100 ml-2 cursor-pointer group">
           <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xs font-black italic shadow-sm group-hover:scale-105 transition-all">
-            LM
+            DB
           </div>
           <div className="hidden lg:flex flex-col">
-            <span className="text-xs font-black text-gray-800 italic uppercase tracking-tighter leading-none">Lindita M.</span>
+            <span className="text-xs font-black text-gray-800 italic uppercase tracking-tighter leading-none">Dion Beqiri</span>
             <span className="text-[9px] font-bold text-gray-400 uppercase">Admin</span>
           </div>
         </div>
