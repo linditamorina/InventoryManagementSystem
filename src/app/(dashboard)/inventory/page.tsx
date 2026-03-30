@@ -186,7 +186,7 @@ export default function InventoryPage() {
                       </div>
                     </td>
                     <td className="p-8 font-bold text-slate-500 uppercase text-[10px]">{p.category}</td>
-                    <td className="p-8 font-black text-slate-900">${p.price}</td>
+                    <td className="p-8 font-black text-slate-900">€{p.price}</td>
                     <td className="p-8">
                       <span className={`px-4 py-2 rounded-xl font-black text-xs ${p.stock_quantity <= p.min_stock_level ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-900'}`}>
                         {p.stock_quantity} CP
@@ -258,7 +258,7 @@ export default function InventoryPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Çmimi ($)</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Çmimi (€)</label>
                   <input required type="number" step="0.01" value={formData.price} onChange={(e)=>setFormData({...formData, price: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
                 </div>
 
