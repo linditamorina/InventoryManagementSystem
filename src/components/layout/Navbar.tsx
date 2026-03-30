@@ -13,7 +13,6 @@ export default function Navbar() {
       
       {/* PJESA E MAJTË - Tani është bosh ose mund të vendosësh një titull faqeje */}
       <div className="flex-1">
-        {/* Mund ta lësh bosh për minimalizëm, ose të shtosh një titull dinamik */}
         <h2 className="text-sm font-medium text-slate-500 italic uppercase tracking-wider">
           Inventory Management
         </h2>
@@ -31,7 +30,6 @@ export default function Navbar() {
             </span>
           )}
           
-          {/* DROP-DOWN I NJOFTIMEVE (Këtu shfaqen mesazhet e Supabase) */}
           {isDropdownOpen && (
             <div className="absolute right-0 mt-3 w-80 bg-white border border-slate-100 shadow-2xl rounded-2xl p-4 z-[100]">
               <div className="flex justify-between items-center mb-4 border-b pb-2">
@@ -57,16 +55,21 @@ export default function Navbar() {
         <Settings size={20} className="text-slate-400 cursor-pointer hover:text-slate-600" />
         <HelpCircle size={20} className="text-slate-400 cursor-pointer hover:text-slate-600" />
         
-        {/* AVATARI I PËRDORUESIT */}
-        <div className="flex items-center gap-3 pl-4 border-l border-slate-100">
-          <div className="text-right hidden md:block">
-            <p className="text-xs font-black text-slate-900 uppercase">Lindita M.</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase">Admin</p>
+        <div className="p-2.5 rounded-xl hover:bg-gray-100 cursor-pointer text-gray-400 transition-all">
+          <HelpCircle size={20} />
+        </div>
+        
+        {/* PROFILE */}
+        <div className="flex items-center gap-3 pl-4 border-l border-gray-100 ml-2 cursor-pointer group">
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xs font-black italic shadow-sm group-hover:scale-105 transition-all">
+            DB
           </div>
-          <div className="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-red-600/20">
-            LM
+          <div className="hidden lg:flex flex-col">
+            <span className="text-xs font-black text-gray-800 italic uppercase tracking-tighter leading-none">Dion Beqiri</span>
+            <span className="text-[9px] font-bold text-gray-400 uppercase">Admin</span>
           </div>
         </div>
+
       </div>
     </header>
   );
