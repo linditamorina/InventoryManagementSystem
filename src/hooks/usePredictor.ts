@@ -48,7 +48,7 @@ export function usePredictor(daysHistory: number = 30) {
     switch (prediction.status) {
       case 'CRITICAL':
         return { 
-          message: `Rrezik mbarimi! (Merr +${toOrder} CP)`, 
+          message: `Mbaruan! (Merr +${toOrder} CP)`, 
           color: "red",
           suggestion: toOrder
         };
