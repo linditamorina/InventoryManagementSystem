@@ -3,10 +3,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, Settings, HelpCircle, X } from 'lucide-react'; 
 import { useNotifications } from '../../hooks/useNotification';
+import { createBrowserClient } from '@supabase/ssr'; // SHTUAR: Për të marrë sesionin
 
 export default function Navbar() {
   const { notifications, unreadCount, deleteNotification, markAsRead } = useNotifications();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  
+  // SHTUAR: State për të dhënat e përdoruesit
+  const [user, setUser] = useState<any>(null);
   
   // Referenca për të detektuar klikimin jashtë dropdown-it
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -21,6 +25,38 @@ export default function Navbar() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // SHTUAR: Fetch për të marrë përdoruesin e loguar
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUser(user);
+      }
+    };
+
+    fetchUser();
+  }, []);
+
+  // SHTUAR: Përgatitja e emrit, rolit dhe inicialeve dinamike
+  const userFullName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Duke ngarkuar...';
+  const userRole = user?.user_metadata?.role || 'Përdorues'; // Mund të ndryshosh default-in nëse do
+  
+  const getInitials = (name: string) => {
+    if (!name || name === 'Duke ngarkuar...') return '...';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+  
+  const initials = getInitials(userFullName);
 
   return (
     <header className="h-16 border-b bg-white flex items-center justify-between px-8 relative z-[50]">
@@ -105,14 +141,18 @@ export default function Navbar() {
           <HelpCircle size={20} />
         </div>
         
-        {/* PROFILE (E PAPREKUR) */}
+        {/* PROFILE (TANI DINAMIKE) */}
         <div className="flex items-center gap-3 pl-4 border-l border-slate-100 ml-2 cursor-pointer group">
           <div className="flex flex-col items-end hidden lg:flex">
-            <span className="text-xs font-black text-slate-900 italic uppercase tracking-tighter leading-none group-hover:text-red-600 transition-colors">Dion Beqiri</span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Admin</span>
+            <span className="text-xs font-black text-slate-900 italic uppercase tracking-tighter leading-none group-hover:text-red-600 transition-colors">
+              {userFullName}
+            </span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest">
+              {userRole}
+            </span>
           </div>
           <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-xs font-black italic shadow-lg group-hover:scale-105 group-hover:rotate-3 transition-all border-2 border-white">
-            DB
+            {initials}
           </div>
         </div>
 
