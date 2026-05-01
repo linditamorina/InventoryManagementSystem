@@ -20,8 +20,27 @@ export default function DashboardPage() {
     const fetchStats = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase.from('products').select('*');
-        if (data && !error) setProducts(data);
+        // 1. Merr ID-në e përdoruesit të kyçur
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) return;
+
+        // 2. Merr profilin për të gjetur company_id
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('company_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.company_id) {
+          // 3. Filtro produktet sipas company_id
+          const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('company_id', profile.company_id); // FILTRIMI KYÇ
+
+          if (data && !error) setProducts(data);
+        }
       } catch (err) {
         console.error("Gabim në marrjen e të dhënave:", err);
       } finally {
@@ -31,6 +50,7 @@ export default function DashboardPage() {
     fetchStats();
   }, [supabase]);
 
+  // Pjesa tjetër e statsData mbetet e njëjtë...
   const statsData = useMemo(() => {
     const total = products.length;
     const low = products.filter(p => Number(p.quantity) < 5).length;
@@ -56,10 +76,8 @@ export default function DashboardPage() {
   ];
 
   return (
-    /* NDRYSHIMI: h-full dhe max-h-full për t'u përshtatur brenda layout-it prind */
     <div className="w-full h-full max-h-full px-8 py-6 flex flex-col gap-6 overflow-hidden bg-white">
-      
-      {/* Header */}
+      {/* UI mbetet e njëjtë siç e keni pasur */}
       <div className="flex-shrink-0">
         <h1 className="text-2xl font-black italic tracking-tighter text-slate-900 uppercase leading-none">
           Dashboard <span className="text-red-600">Overview</span>
@@ -67,7 +85,6 @@ export default function DashboardPage() {
         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.3em] italic mt-1">Analiza në kohë reale</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-shrink-0">
         {stats.map((stat, i) => (
           <div key={i} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
@@ -82,9 +99,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* CHART SECTION - flex-1 detyron grafikët të zënë vetëm hapësirën e mbetur */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-        {/* Bar Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col min-h-0">
           <h2 className="text-base font-black italic tracking-tighter text-slate-900 uppercase mb-4 flex-shrink-0">Produktet sipas Kategorisë</h2>
           <div className="flex-1 w-full min-h-0">
@@ -100,7 +115,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Pie Chart */}
         <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col min-h-0">
           <h2 className="text-base font-black italic tracking-tighter text-slate-900 uppercase mb-4 text-center flex-shrink-0">Statusi i Stokut</h2>
           <div className="flex-1 w-full min-h-0">
