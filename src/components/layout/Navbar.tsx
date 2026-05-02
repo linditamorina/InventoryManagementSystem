@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Settings, HelpCircle, X, User, ShieldCheck, LogOut, ChevronRight, Key } from 'lucide-react'; 
+import { Bell, Settings, HelpCircle, X, User, ShieldCheck, LogOut, ChevronRight, Key, Building } from 'lucide-react'; 
 import { useNotifications } from '../../hooks/useNotification';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
@@ -119,6 +119,7 @@ export default function Navbar() {
               </div>
 
               <div className="p-4 space-y-1">
+
                 {userRole === 'admin' && (
                   <button onClick={() => { setIsProfileOpen(false); router.push('/dashboard/staff'); }} className="w-full flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl transition-all group">
                     <div className="flex items-center gap-3">
@@ -133,6 +134,14 @@ export default function Navbar() {
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-slate-100 rounded-xl text-slate-500 group-hover:bg-red-50 group-hover:text-red-600 transition-colors"><Key size={16} /></div>
                     <span className="text-[11px] font-black uppercase text-slate-600 italic">Ndrysho Fjalëkalimin</span>
+                  </div>
+                  <ChevronRight size={14} className="text-slate-300" />
+                </button>
+                                {/* ABOUT COMPANY - VENDOSUR E PARA */}
+                <button onClick={() => { setIsProfileOpen(false); router.push('/dashboard/about-company'); }} className="w-full flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl transition-all group">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-slate-100 rounded-xl text-slate-500 group-hover:bg-red-50 group-hover:text-red-600 transition-colors"><Building size={16} /></div>
+                    <span className="text-[11px] font-black uppercase text-slate-600 italic">Rreth Kompanisë</span>
                   </div>
                   <ChevronRight size={14} className="text-slate-300" />
                 </button>
