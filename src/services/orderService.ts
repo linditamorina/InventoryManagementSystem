@@ -7,41 +7,41 @@ export const orderService = {
   async createSaleTransaction(payload: SalePayload) {
     
     // 1. Krijo Koken e Faturës (Merr ID-në e re)
-    const { data: newOrder, error: orderError } = await supabase
-      .from('orders')
-      .insert(payload.order)
+    const { data: newSale, error: saleError } = await supabase
+      .from('sales') 
+      .insert(payload.sale) 
       .select()
       .single();
 
-    if (orderError) throw new Error(`Gabim në krijimin e faturës: ${orderError.message}`);
+    if (saleError) throw new Error(`Gabim në krijimin e faturës: ${saleError.message}`);
 
-    const orderId = newOrder.id;
+    const saleId = newSale.id;
 
     // 2. Përgatit produktet për t'u ruajtur duke u shtuar ID-në e faturës
-    const orderItemsToInsert = payload.items.map(item => ({
-      order_id: orderId,
+    const saleItemsToInsert = payload.items.map(item => ({
+      sale_id: saleId,
       product_id: item.product_id,
       quantity: item.quantity,
-      price_at_sale: item.price_at_sale
+      unit_price: item.unit_price 
     }));
 
     const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItemsToInsert);
+      .from('sale_items') 
+      .insert(saleItemsToInsert);
 
     if (itemsError) {
       // Nëse produktet dështojnë, fshijmë faturën (Rollback)
-      await supabase.from('orders').delete().eq('id', orderId);
+      await supabase.from('sales').delete().eq('id', saleId);
       throw new Error(`Gabim në ruajtjen e produkteve: ${itemsError.message}`);
     }
 
     // 3. Përgatit Lëvizjet e Stokut (Zbret stokun për çdo produkt në shportë)
     const stockMovementsToInsert = payload.items.map(item => ({
       product_id: item.product_id,
-      type: 'out',
+      type: 'OUT', 
       quantity: item.quantity,
-      reason: `Shitje nga fatura #${orderId.substring(0, 8)}`,
-      worker_name: payload.order.worker_name
+      reason: `Shitje nga fatura #${saleId.substring(0, 8)}`,
+      user_id: payload.sale.user_id 
     }));
 
     const { error: stockError } = await supabase
@@ -50,6 +50,6 @@ export const orderService = {
 
     if (stockError) throw new Error(`Fatura u krijua, por stoku nuk u zbrit saktë: ${stockError.message}`);
 
-    return newOrder;
+    return newSale;
   }
 };

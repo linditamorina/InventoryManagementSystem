@@ -1,5 +1,13 @@
 // src/types/index.ts
+// MODULI I KATEGORIVE
+export interface Category {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
 
+export type InsertCategory = Omit<Category, 'id' | 'created_at'>;
 export interface Product {
   id: string;
   name: string;
@@ -63,4 +71,13 @@ export type InsertSaleItem = Omit<SaleItem, 'id' | 'sale_id'>;
 export interface SalePayload {
   sale: InsertSale;
   items: InsertSaleItem[];
+}
+
+// MODULI I RAPORTEVE 
+export interface SalesReportSummary {
+  start_date: string;
+  end_date: string;
+  total_revenue: number;
+  total_orders: number;
+  orders: Sale[]; 
 }
