@@ -1,20 +1,27 @@
 // src/hooks/usePredictor.ts
 import { useQuery } from '@tanstack/react-query';
 import { stockPredictorService } from '../services/stockPredictorService';
-import { StockPrediction } from '../types';
+// Importojmë hook-un e gjuhës
+import { useLanguage } from '../context/LanguageContext';
+
+type StockPrediction = {
+  product_id: string;
+  status: 'CRITICAL' | 'WARNING' | 'GOOD' | string;
+};
 
 export function usePredictor(daysHistory: number = 30) {
+  // Marrim funksionin t për përkthime
+  const { t } = useLanguage();
+
   const { data: predictions } = useQuery({
     queryKey: ['stock-predictions', daysHistory],
     queryFn: () => stockPredictorService.getPredictions(daysHistory),
   });
 
-  // Logjika për llogaritjen e sasisë së sugjeruar
   const calculateSuggestion = (current: number, min: number = 2) => {
-    // Formula: Plotësojmë limitin minimal + një rezervë sigurie (psh. 10 copë ose trefishi i limitit)
     const safetyBuffer = Math.max(10, min * 3);
     const suggested = safetyBuffer - current;
-    return suggested > 0 ? suggested : 5; // Minimumi sugjeron 5 nëse llogaria del 0
+    return suggested > 0 ? suggested : 5;
   };
 
   const getStockStatus = (productId: string, currentStock: number, minStockLevel?: number) => {
@@ -24,7 +31,8 @@ export function usePredictor(daysHistory: number = 30) {
     // 1. Nëse stoku është 0 ose më pak
     if (currentStock <= 0) {
       return { 
-        message: `Mbaruan! (Merr +${toOrder} CP)`, 
+        // Përdorim t() me parametër për numrin e copëve
+        message: `${t('status_empty')} (+${toOrder} CP)`, 
         color: "red",
         suggestion: toOrder 
       };
@@ -33,35 +41,33 @@ export function usePredictor(daysHistory: number = 30) {
     // 2. Limiti manual
     if (currentStock <= min) {
       return { 
-        message: `Stok i ulët (Merr +${toOrder} CP)`, 
+        message: `${t('status_low')} (+${toOrder} CP)`, 
         color: "orange",
         suggestion: toOrder
       };
     }
 
-    // Gjejmë parashikimin nga AI
     const prediction = predictions?.find((p: StockPrediction) => p.product_id === productId);
     
-    if (!prediction) return { message: "Nuk ka të dhëna", color: "gray" };
+    if (!prediction) return { message: t('no_data'), color: "gray" };
     
-    // 3. Statuset nga AI me sugjerim të integruar
     switch (prediction.status) {
       case 'CRITICAL':
         return { 
-          message: `Mbaruan! (Merr +${toOrder} CP)`, 
+          message: `${t('status_empty')} (+${toOrder} CP)`, 
           color: "red",
           suggestion: toOrder
         };
       case 'WARNING':
         return { 
-          message: `Stok i ulët (Merr +${toOrder} CP)`, 
+          message: `${t('status_low')} (+${toOrder} CP)`, 
           color: "orange",
           suggestion: toOrder
         };
       case 'GOOD':
-        return { message: "Stok i sigurt", color: "emerald" };
+        return { message: t('status_ok'), color: "emerald" };
       default:
-        return { message: "Nuk ka të dhëna", color: "gray" };
+        return { message: t('no_data'), color: "gray" };
     }
   };
 

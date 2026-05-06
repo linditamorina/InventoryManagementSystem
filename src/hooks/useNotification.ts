@@ -1,17 +1,41 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 export const useNotifications = () => {
   const queryClient = useQueryClient();
+  const [targetAdminId, setTargetAdminId] = useState<string | null>(null);
 
-  // 1. Leximi i njoftimeve nga Databaza
+  // 1. Gjejmë automatikisht se cilës kompani i përket ky përdorues (Admin ose Staff)
+  useEffect(() => {
+    const fetchAdminId = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, admin_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile && profile.role === 'staff' && profile.admin_id) {
+        setTargetAdminId(profile.admin_id);
+      } else {
+        setTargetAdminId(user.id);
+      }
+    };
+    fetchAdminId();
+  }, []);
+
+  // 2. Leximi i njoftimeve TË FILTRUARA vetëm për këtë kompani
   const { data: notifications = [] } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['notifications', targetAdminId], // Izolojmë cache-in
+    enabled: !!targetAdminId, // Mos kërko asgjë nëse s'kemi gjetur akoma ID-në
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
+        .eq('admin_id', targetAdminId) // <-- FILTRI MAGJIK: Jep vetëm të miat!
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -22,76 +46,75 @@ export const useNotifications = () => {
     }
   });
 
-  // 2. Logjika Real-time (Sync automatik me databazën)
+  // 3. Logjika Real-time TË FILTRUARA vetëm për këtë kompani
   useEffect(() => {
+    if (!targetAdminId) return; // Nëse s'ka ID, mos e hap kanalin
+
     const channel = supabase
-      .channel('public:notifications') // Emër i përditësuar për të shmangur konfliktet
+      .channel(`notifications-${targetAdminId}`) // Kanal unik për çdo biznes
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'notifications' }, 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'notifications',
+          filter: `admin_id=eq.${targetAdminId}` // <-- FILTRI I ZILES: Bjer vetëm për mua!
+        }, 
         (payload) => {
-          console.log("Realtime event u kap:", payload); // Për debugging
-          // Kur ndodh çdo lloj ndryshimi (Insert/Update/Delete), rifresko të dhënat
-          queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          console.log("Realtime event u kap për këtë kompani:", payload);
+          queryClient.invalidateQueries({ queryKey: ['notifications', targetAdminId] });
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log("Supabase Realtime: Lidhja për njoftimet është AKTIVE!");
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [targetAdminId, queryClient]);
 
-  // 3. Funksioni për të shtuar një njoftim të ri (p.sh. nga AI ose Inventory)
+  // 4. Funksioni për të shtuar një njoftim të ri
   const addNotification = async (message: string) => {
+    if (!targetAdminId) return;
+
     const { error } = await supabase
       .from('notifications')
       .insert([{ 
         message, 
         is_read: false,
+        admin_id: targetAdminId,
         created_at: new Date().toISOString()
       }]);
 
-    if (error) {
-      console.error("Gabim gjatë shtimit të njoftimit:", error.message);
-    } else {
-      // RREGULLIMI KRYESOR: Rifresko zilen MENJËHERË sapo shtohet njoftimi!
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ['notifications', targetAdminId] });
     }
   };
 
-  // 4. Funksioni për të fshirë njoftimin (Butoni X)
+  // 5. Funksioni për të fshirë njoftimin
   const deleteNotification = async (id: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error("Gabim gjatë fshirjes:", error.message);
-    } else {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    }
+    if (!targetAdminId) return;
+    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    if (!error) queryClient.invalidateQueries({ queryKey: ['notifications', targetAdminId] });
   };
 
-  // 5. Funksioni për të hequr "pikën e kuqe" (Shëno si i lexuar)
+  // 6. Shëno një njoftim specifik si të lexuar
   const markAsRead = async (id: string) => {
+    if (!targetAdminId) return;
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    if (!error) queryClient.invalidateQueries({ queryKey: ['notifications', targetAdminId] });
+  };
+
+  // 7. Shëno të gjitha njoftimet si të lexuara
+  const markAllAsRead = async () => {
+    if (!targetAdminId) return;
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
-      .eq('id', id);
+      .eq('is_read', false)
+      .eq('admin_id', targetAdminId);
 
-    if (error) {
-      console.error("Gabim gjatë shënimit si i lexuar:", error.message);
-    } else {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    }
+    if (!error) queryClient.invalidateQueries({ queryKey: ['notifications', targetAdminId] });
   };
 
-  // Llogaritja e njoftimeve që nuk janë lexuar ende
   const unreadCount = notifications.filter((n: any) => !n.is_read).length;
 
   return { 
@@ -99,6 +122,7 @@ export const useNotifications = () => {
     unreadCount, 
     addNotification, 
     deleteNotification, 
-    markAsRead 
+    markAsRead,
+    markAllAsRead 
   };
 }

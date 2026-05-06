@@ -1,17 +1,137 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Package, Plus, Search, Filter, Edit3, Trash2, History, X, Loader2,
   CheckCircle, AlertTriangle, Trash, Sparkles, LayoutGrid, AlertCircle,
-  ArrowUpRight, ArrowDownRight, ArrowUpDown, BrainCircuit, Timer
+  ArrowUpRight, ArrowDownRight, ArrowUpDown, BrainCircuit, Timer, ChevronDown,
+  Tag, DollarSign, Hash, Type, AlignLeft
 } from "lucide-react";
 import { useProducts, useCreateProduct, useDeleteProduct, useUpdateProduct } from "../../../hooks/useProducts";
 import { useProductMovements, useRecordMovement } from "../../../hooks/useStock";
 import { usePredictor } from "../../../hooks/usePredictor";
-import { useNotifications } from "../../../hooks/useNotification"; // IMPORTI I RI
+import { useNotifications } from "../../../hooks/useNotification"; 
+
+import { useLanguage } from "../../../context/LanguageContext"; 
+import { supabase } from "../../../lib/supabase";
+
+const translations = {
+  en: {
+    inventory: "Inventory",
+    stock: "Stock",
+    subtitle: "Real-time product management",
+    addProduct: "Add Product",
+    searchPlaceholder: "Search by Name or SKU...",
+    all: "All",
+    lowStock: "Low Stock",
+    showAll: "Show All",
+    tableProdSku: "Product / SKU",
+    tableCategory: "Category",
+    tableStock: "Stock",
+    tableAIPred: "AI Prediction",
+    tableActions: "Actions",
+    loading: "Loading...",
+    noProducts: "No products found.",
+    historyTitle: "History",
+    noMovements: "No movements",
+    date: "Date",
+    type: "Type",
+    qty: "Quantity",
+    reason: "Reason",
+    in: "IN",
+    out: "OUT",
+    newStock: "New Stock",
+    inPlus: "In (+)",
+    outMinus: "Out (-)",
+    update: "Update",
+    add: "Add",
+    edit: "Edit",
+    stockDetails: "Stock Details",
+    name: "Name",
+    desc: "Description",
+    category: "Category",
+    price: "Price",
+    manualLimit: "Low stock alert (Manual limit)",
+    save: "Save",
+    deleteTitle: "Delete?",
+    yesDelete: "Yes, Delete",
+    cancel: "Cancel",
+    equipment: "Equipment",
+    software: "Software",
+    accessories: "Accessories",
+    pcs: "pcs",
+    newSupply: "New supply",
+    sale: "Sale",
+    alertEmpty: (name: string) => `ALARM: Stock for "${name}" is completely empty!`,
+    alertCritical: (name: string, qty: number) => `WARNING: "${name}" reached critical limit (${qty} left).`,
+    alertUpdated: (name: string, qty: number) => `Update: Stock of "${name}" updated to ${qty} pcs.`,
+    errorNoName: "Please enter the product name.",
+    errorQty: "Quantity must be greater than 0!",
+    productAdded: (name: string) => `New product: "${name}" added to inventory.`,
+    productDeleted: (name: string) => `Product "${name}" deleted from the system.`
+  },
+  sq: {
+    inventory: "Inventory",
+    stock: "Stock",
+    subtitle: "Menaxhimi i produkteve në kohë reale",
+    addProduct: "Shto Produkt",
+    searchPlaceholder: "Kërko me Emër ose SKU...",
+    all: "Të Gjitha",
+    lowStock: "Stok i Ulët",
+    showAll: "Trego të Gjitha",
+    tableProdSku: "Produkt / SKU",
+    tableCategory: "Kategoria",
+    tableStock: "Stoku",
+    tableAIPred: "Parashikimi AI",
+    tableActions: "Veprime",
+    loading: "Duke ngarkuar...",
+    noProducts: "Asnjë produkt u gjet.",
+    historyTitle: "Historiku",
+    noMovements: "Nuk ka lëvizje",
+    date: "Data",
+    type: "Lloji",
+    qty: "Sasia",
+    reason: "Arsyeja",
+    in: "HYRJE",
+    out: "DALJE",
+    newStock: "Stok i Ri",
+    inPlus: "Hyrje (+)",
+    outMinus: "Dalje (-)",
+    update: "Përditëso",
+    add: "Shto",
+    edit: "Edito",
+    stockDetails: "Detajet e Stokut",
+    name: "Emri",
+    desc: "Përshkrimi",
+    category: "Kategoria",
+    price: "Çmimi",
+    manualLimit: "Alarmi për stok të ulët (Limiti manual)",
+    save: "Ruaj",
+    deleteTitle: "Fshije?",
+    yesDelete: "Po, Fshije",
+    cancel: "Anulo",
+    equipment: "Pajisje",
+    software: "Softuer",
+    accessories: "Aksesorë",
+    pcs: "CP",
+    newSupply: "Furnizim i ri",
+    sale: "Shitje",
+    alertEmpty: (name: string) => `ALARM: Stoku për "${name}" ka mbaruar plotësisht!`,
+    alertCritical: (name: string, qty: number) => `KUJDES: "${name}" ka arritur limitin kritik (${qty} mbetur).`,
+    alertUpdated: (name: string, qty: number) => `Përditësim: Stoku i "${name}" u përditësua në ${qty} CP.`,
+    errorNoName: "Ju lutem shkruani emrin e produktit.",
+    errorQty: "Sasia duhet të jetë më e madhe se 0!",
+    productAdded: (name: string) => `Produkt i ri: "${name}" u shtua në inventar.`,
+    productDeleted: (name: string) => `Produkti "${name}" u fshi nga sistemi.`
+  }
+};
 
 export default function InventoryPage() {
+  const { language } = useLanguage(); 
+  const t = translations[language as keyof typeof translations] || translations.sq;
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   const { data: products = [], isLoading } = useProducts();
   const createMutation = useCreateProduct();
   const deleteMutation = useDeleteProduct();
@@ -19,7 +139,7 @@ export default function InventoryPage() {
   const recordMovement = useRecordMovement();
   
   const { getStockStatus } = usePredictor();
-  const { addNotification } = useNotifications(); // INITIALIZIMI I RI
+  const { addNotification } = useNotifications(); 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -35,43 +155,81 @@ export default function InventoryPage() {
   const [adjustmentData, setAdjustmentData] = useState({
     type: "IN",
     quantity: "",
-    reason: "Furnizim i ri",
+    reason: t.newSupply,
   });
 
   const { data: movements = [], isLoading: isLoadingMovements } = useProductMovements(selectedProductIdForHistory || "");
 
-  const [categoryFilter, setCategoryFilter] = useState("Të Gjitha");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
     sku: "",
-    category: "Pajisje",
+    category: t.equipment,
     price: "",
     quantity: "", 
     description: "",
     min_stock_level: "2",
   });
 
-  // FUNKSIONI NDIHMES PER MESAZHET E NJOFTIMEVE
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        if (profile) setUserRole(profile.role);
+      }
+    };
+    fetchUserData();
+  }, []);
+
+  useEffect(() => {
+    setAdjustmentData(prev => ({ ...prev, reason: prev.type === "IN" ? t.newSupply : t.sale }));
+    if (!editingProduct) {
+      setFormData(prev => ({ ...prev, category: prev.category === translations.en.equipment || prev.category === translations.sq.equipment ? t.equipment : prev.category }));
+    }
+  }, [language]);
+
+  // LOGJIKA E RE: Përkthyesi Dinamik i Kategorive
+  const getStandardCategory = (cat: string) => {
+    if (!cat) return 'UNKNOWN';
+    const c = cat.toLowerCase();
+    if (c === 'pajisje' || c === 'equipment') return 'EQUIPMENT';
+    if (c === 'softuer' || c === 'software') return 'SOFTWARE';
+    if (c === 'aksesorë' || c === 'accessories') return 'ACCESSORIES';
+    return cat; // Nëse ka kategori tjetër
+  };
+
+  const displayCategory = (stdCat: string) => {
+    if (stdCat === 'EQUIPMENT') return t.equipment;
+    if (stdCat === 'SOFTWARE') return t.software;
+    if (stdCat === 'ACCESSORIES') return t.accessories;
+    return stdCat; // Nëse ka kategori tjetër
+  };
+
   const triggerStockNotification = (name: string, quantity: number, minLevel: number) => {
     if (quantity === 0) {
-      addNotification(`ALARM: Stoku për "${name.toUpperCase()}" ka mbaruar plotësisht!`);
+      addNotification(t.alertEmpty(name.toUpperCase()));
     } else if (quantity <= minLevel) {
-      addNotification(`KUJDES: "${name.toUpperCase()}" ka arritur limitin kritik (${quantity} mbetur).`);
+      addNotification(t.alertCritical(name.toUpperCase(), quantity));
     } else {
-      addNotification(`Përditësim: Stoku i "${name.toUpperCase()}" u përditësua në ${quantity} CP.`);
+      addNotification(t.alertUpdated(name.toUpperCase(), quantity));
     }
   };
 
   const generateAIDescription = async () => {
-    if (!formData.name) return alert("Ju lutem shkruani emrin e produktit.");
+    if (!formData.name) return alert(t.errorNoName);
     setIsGeneratingAI(true);
     try {
       const res = await fetch("/api/ai/generate-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productName: formData.name, category: formData.category }),
+        body: JSON.stringify({ productName: formData.name, category: formData.category, lang: language }),
       });
       const data = await res.json();
       if (data.description) setFormData((prev) => ({ ...prev, description: data.description }));
@@ -84,10 +242,12 @@ export default function InventoryPage() {
 
   const openEditModal = (product: any) => {
     setEditingProduct(product);
+    // Sigurohemi që në editim i shfaqet gjuha aktuale
+    const stdCat = getStandardCategory(product.category);
     setFormData({
       name: product.name || "",
       sku: product.sku || "",
-      category: product.category || "Pajisje",
+      category: displayCategory(stdCat),
       price: product.price?.toString() || "",
       quantity: product.quantity?.toString() || "", 
       description: product.description || "",
@@ -103,7 +263,7 @@ export default function InventoryPage() {
     const quantityChange = parseInt(adjustmentData.quantity);
     
     if (isNaN(quantityChange) || quantityChange <= 0) {
-      alert("Sasia duhet të jetë më e madhe se 0!");
+      alert(t.errorQty);
       return;
     }
 
@@ -128,12 +288,11 @@ export default function InventoryPage() {
             updates: { quantity: finalStock } 
           }, {
             onSuccess: () => {
-              // NJOFTIMI PAS RREGULLIMIT TE STOKUT
               triggerStockNotification(adjustingProduct.name, finalStock, adjustingProduct.min_stock_level);
             }
           });
           setIsAdjustmentModalOpen(false);
-          setAdjustmentData({ type: "IN", quantity: "", reason: "Furnizim i ri" });
+          setAdjustmentData({ type: "IN", quantity: "", reason: t.newSupply });
         },
       }
     );
@@ -148,7 +307,7 @@ export default function InventoryPage() {
       quantity: parseInt(formData.quantity) || 0,
       min_stock_level: parseInt(formData.min_stock_level) || 0,
       description: formData.description,
-      category: formData.category,
+      category: formData.category, // Ruhet në gjuhën që është aktuale
     };
 
     if (editingProduct) {
@@ -157,7 +316,6 @@ export default function InventoryPage() {
         { onSuccess: () => { 
           setIsModalOpen(false); 
           setEditingProduct(null);
-          // NJOFTIMI PAS EDITIMIT
           triggerStockNotification(productData.name, productData.quantity, productData.min_stock_level);
         } }
       );
@@ -165,9 +323,8 @@ export default function InventoryPage() {
       createMutation.mutate(productData as any, {
         onSuccess: () => {
           setIsModalOpen(false);
-          setFormData({ name: "", sku: "", category: "Pajisje", price: "", quantity: "", description: "", min_stock_level: "2" });
-          // NJOFTIMI PAS SHTIMIT TE RI
-          addNotification(`Produkt i ri: "${productData.name.toUpperCase()}" u shtua në inventar.`);
+          setFormData({ name: "", sku: "", category: t.equipment, price: "", quantity: "", description: "", min_stock_level: "2" });
+          addNotification(t.productAdded(productData.name.toUpperCase()));
         },
       });
     }
@@ -180,27 +337,31 @@ export default function InventoryPage() {
         onSuccess: () => { 
           setDeleteConfirmOpen(false); 
           setDeleteId(null); 
-          // NJOFTIMI PAS FSHIRJES
-          addNotification(`Produkti "${productToDelete?.name?.toUpperCase() || 'i zgjedhur'}" u fshi nga sistemi.`);
+          addNotification(t.productDeleted(productToDelete?.name?.toUpperCase() || ''));
         },
       });
     }
   };
 
+  // Filtrimi u bë Dinamik sipas 'Standard Category'
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === "Të Gjitha" || p.category === categoryFilter;
+    
+    const stdCat = getStandardCategory(p.category);
+    const matchesCategory = categoryFilter === "ALL" || stdCat === categoryFilter;
+    
     const matchesLowStock = showLowStockOnly ? Number(p.quantity) <= Number(p.min_stock_level) : true;
     return matchesSearch && matchesCategory && matchesLowStock;
   });
 
-  const uniqueCategories = ["Të Gjitha", ...new Set(products.map((p: any) => p.category))];
+  // Marrim kategoritë standarde unike për Select-in lart
+  const uniqueCategories = [...new Set(products.map((p: any) => getStandardCategory(p.category)))];
 
   const handleTypeChange = (newType: "IN" | "OUT") => {
     setAdjustmentData({
       ...adjustmentData,
       type: newType,
-      reason: newType === "IN" ? "Furnizim i ri" : "Shitje",
+      reason: newType === "IN" ? t.newSupply : t.sale,
     });
   };
 
@@ -210,107 +371,206 @@ export default function InventoryPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div>
           <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">
-            Inventory <span className="text-red-600">Stock</span>
+            {t.inventory} <span className="text-red-600">{t.stock}</span>
           </h1>
-          <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.2em] mt-2">Menaxhimi i produkteve në kohë reale</p>
+          <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.2em] mt-2">{t.subtitle}</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingProduct(null);
-            setFormData({ name: "", sku: "", category: "Pajisje", price: "", quantity: "", description: "", min_stock_level: "2" });
-            setIsModalOpen(true);
-          }}
-          className="bg-red-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-3 hover:bg-slate-900 transition-all shadow-2xl shadow-red-600/30 active:scale-95 border-2 border-red-600"
-        >
-          <Plus size={20} strokeWidth={3} /> Shto Produkt
-        </button>
+        
+        {userRole === 'admin' && (
+          <button
+            onClick={() => {
+              setEditingProduct(null);
+              setFormData({ name: "", sku: "", category: t.equipment, price: "", quantity: "", description: "", min_stock_level: "2" });
+              setIsModalOpen(true);
+            }}
+            className="bg-red-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-3 hover:bg-slate-900 transition-all shadow-2xl shadow-red-600/30 active:scale-95 border-2 border-red-600"
+          >
+            <Plus size={20} strokeWidth={3} /> {t.addProduct}
+          </button>
+        )}
       </div>
 
-      {/* SEARCH & FILTERS */}
-      <div className="flex flex-col lg:flex-row gap-4">
+      {/* SEARCH & FILTERS (VERSIONI I PËRMIRËSUAR) */}
+      <div className="flex flex-col lg:flex-row gap-3 bg-white p-2.5 rounded-[2rem] shadow-sm border border-slate-100 w-full relative z-10">
+        
+        {/* SEARCH BAR */}
         <div className="flex-1 relative group">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-red-600 transition-colors" size={20} />
+          <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+            <Search className="text-slate-400 group-focus-within:text-red-600 transition-colors" size={20} />
+          </div>
           <input
             type="text"
-            placeholder="Kërko me Emër ose SKU..."
-            className="w-full pl-14 pr-6 py-5 bg-white border border-slate-200 rounded-[1.5rem] outline-none focus:ring-4 focus:ring-red-600/5 focus:border-red-600 font-bold transition-all shadow-sm"
+            placeholder={t.searchPlaceholder}
+            className="w-full pl-14 pr-12 py-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-[1.5rem] outline-none focus:bg-white focus:ring-4 focus:ring-red-600/5 focus:border-red-300 font-bold text-slate-800 transition-all placeholder:text-slate-400 shadow-inner"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              className="absolute inset-y-0 right-5 flex items-center text-slate-400 hover:text-red-600 transition-colors"
+            >
+              <X size={18} strokeWidth={3} />
+            </button>
+          )}
         </div>
-        <div className="relative flex-shrink-0">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full lg:w-48 pl-12 pr-6 py-5 bg-white border border-slate-200 rounded-[1.5rem] outline-none focus:ring-4 focus:ring-red-600/5 focus:border-red-600 font-black text-slate-600 uppercase text-[10px] tracking-widest transition-all shadow-sm appearance-none cursor-pointer"
+
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          {/* KATEGORIA */}
+          <div className="relative flex-shrink-0 w-full sm:w-56 group">
+            <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+              <LayoutGrid className="text-slate-400 group-focus-within:text-red-600 transition-colors" size={18} />
+            </div>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full pl-12 pr-12 py-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-[1.5rem] outline-none focus:bg-white focus:ring-4 focus:ring-red-600/5 focus:border-red-300 font-black text-slate-700 uppercase text-[10px] tracking-widest transition-all appearance-none cursor-pointer shadow-inner"
+            >
+              <option value="ALL">{t.all}</option>
+              {uniqueCategories.map((cat: any) => (
+                <option key={cat} value={cat}>{displayCategory(cat)}</option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-5 flex items-center pointer-events-none">
+              <ChevronDown className="text-slate-400 group-focus-within:text-red-600 transition-transform duration-300 group-focus-within:-rotate-180" size={16} strokeWidth={3} />
+            </div>
+          </div>
+
+          {/* LOW STOCK BUTTON */}
+          <button
+            onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+            className={`relative overflow-hidden flex-shrink-0 w-full sm:w-auto px-8 py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 transition-all duration-300 border-2 ${
+              showLowStockOnly 
+                ? "bg-red-50 border-red-100 text-red-600" 
+                : "bg-white border-transparent text-slate-400 hover:bg-slate-50 hover:text-slate-900"
+            }`}
           >
-            {uniqueCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-          <LayoutGrid className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <AlertCircle 
+              size={18} 
+              className={`transition-transform duration-300 ${showLowStockOnly ? 'scale-110 text-red-600' : 'text-slate-400'}`} 
+              strokeWidth={showLowStockOnly ? 3 : 2}
+            /> 
+            <span className="relative z-10">{showLowStockOnly ? t.showAll : t.lowStock}</span>
+            
+            {/* Pika pulsuese e alarmit kur është aktiv */}
+            {showLowStockOnly && (
+              <span className="absolute top-3 right-3 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+            )}
+          </button>
         </div>
-        <button
-          onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-          className={`flex-shrink-0 py-5 px-8 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all shadow-sm border ${showLowStockOnly ? "bg-red-600 text-white border-red-600 hover:bg-red-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}
-        >
-          <AlertCircle size={18} /> {showLowStockOnly ? "Trego të Gjitha" : "Stok i Ulët"}
-        </button>
       </div>
 
-      {/* TABELA */}
-      <div className="bg-white rounded-[3rem] border border-slate-200 shadow-xl overflow-hidden">
+ {/* TABELA (VERSIONI PREMIUM SAAS) */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-hidden relative z-0 mt-4">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">Produkt / SKU</th>
-                <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">Kategoria</th>
-                <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">Stoku</th>
-                <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">Parashikimi AI</th>
-                <th className="p-8 text-[11px] font-black text-slate-400 uppercase tracking-widest text-right">Veprime</th>
+              <tr className="bg-slate-50/80 border-b border-slate-100">
+                <th className="py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t.tableProdSku}</th>
+                <th className="py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t.tableCategory}</th>
+                <th className="py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t.tableStock}</th>
+                <th className="py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{t.tableAIPred}</th>
+                <th className="py-6 px-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">{t.tableActions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
-                <tr><td colSpan={5} className="p-32 text-center font-black text-slate-300 uppercase tracking-[0.3em]">Duke ngarkuar...</td></tr>
+                <tr>
+                  <td colSpan={5} className="p-24 text-center">
+                    <Loader2 className="animate-spin mx-auto text-red-600 mb-4" size={32} />
+                    <span className="font-black text-slate-300 uppercase tracking-[0.3em] text-xs">{t.loading}</span>
+                  </td>
+                </tr>
               ) : filteredProducts.length === 0 ? (
-                <tr><td colSpan={5} className="p-32 text-center font-black text-slate-300 uppercase tracking-widest">Asnjë produkt u gjet.</td></tr>
+                <tr>
+                  <td colSpan={5} className="p-24 text-center">
+                    <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                      <Package size={24} className="text-slate-300" />
+                    </div>
+                    <span className="font-black text-slate-400 uppercase tracking-widest text-xs">{t.noProducts}</span>
+                  </td>
+                </tr>
               ) : (
                 filteredProducts.map((p: any) => {
                   const status = getStockStatus(p.id, p.quantity, p.min_stock_level);
+                  const isLowStock = p.quantity <= p.min_stock_level;
+                  
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/80 transition-all group italic font-medium">
-                      <td className="p-8">
-                        <div className="flex flex-col">
-                          <span className="font-black text-slate-900 uppercase text-sm">{p.name}</span>
-                          <span className="text-[10px] text-red-600 font-bold tracking-tighter">{p.sku}</span>
+                    <tr key={p.id} className="hover:bg-slate-50/50 transition-all group italic font-medium">
+                      
+                      {/* PRODUKTI & SKU */}
+                      <td className="p-6 px-8">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-red-50 group-hover:text-red-600 group-hover:border-red-100 transition-all shadow-sm">
+                            <Package size={20} strokeWidth={2.5} />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-black text-slate-900 uppercase text-sm group-hover:text-red-600 transition-colors">{p.name}</span>
+                            <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-0.5">{p.sku}</span>
+                          </div>
                         </div>
                       </td>
-                      <td className="p-8 font-bold text-slate-500 uppercase text-[10px]">{p.category}</td>
-                      <td className="p-8">
-                        <span className={`px-4 py-2 rounded-xl font-black text-xs ${p.quantity <= p.min_stock_level ? "bg-red-50 text-red-600 border border-red-100 animate-pulse" : "bg-slate-100 text-slate-900"}`}>
-                          {p.quantity} CP
+
+                      {/* KATEGORIA */}
+                      <td className="p-6 px-8">
+                        <span className="inline-flex items-center px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-sm text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          {displayCategory(getStandardCategory(p.category))}
                         </span>
                       </td>
-                      <td className="p-8">
-                        <div className={`flex items-center gap-2 font-black text-[10px] uppercase ${status.color === 'red' ? 'text-red-600' : status.color === 'orange' ? 'text-orange-500' : 'text-emerald-600'}`}>
+
+                      {/* STOKU (Pill Badge) */}
+                      <td className="p-6 px-8">
+                        {isLowStock ? (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 border border-red-100 text-red-600 font-black text-xs animate-pulse shadow-sm">
+                            <AlertTriangle size={14} strokeWidth={3} />
+                            <span>{p.quantity} {t.pcs}</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 font-black text-xs shadow-sm">
+                            <CheckCircle size={14} strokeWidth={3} />
+                            <span>{p.quantity} {t.pcs}</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* PARASHIKIMI AI */}
+                      <td className="p-6 px-8">
+                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl font-black text-[10px] uppercase shadow-sm border ${
+                          status.color === 'red' ? 'bg-red-50 text-red-600 border-red-100' : 
+                          status.color === 'orange' ? 'bg-orange-50 text-orange-500 border-orange-100' : 
+                          'bg-blue-50 text-blue-600 border-blue-100'
+                        }`}>
                            <BrainCircuit size={14} />
                            {status.message}
                         </div>
                       </td>
-                      <td className="p-8 text-right space-x-2">
-                        <button onClick={() => { setAdjustingProduct(p); setIsAdjustmentModalOpen(true); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Rregullo Stokun">
-                          <ArrowUpDown size={16} />
-                        </button>
-                        <button onClick={() => { setSelectedProductIdForHistory(p.id); setSelectedProductName(p.name); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm">
-                          <History size={16} />
-                        </button>
-                        <button onClick={() => openEditModal(p)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm">
-                          <Edit3 size={16} />
-                        </button>
-                        <button onClick={() => { setDeleteId(p.id); setDeleteConfirmOpen(true); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm">
-                          <Trash2 size={16} />
-                        </button>
+
+                      {/* VEPRIMET (Actions) */}
+                      <td className="p-6 px-8 text-right">
+                        <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                          
+                          {/* Butoni Hyrje/Dalje (Për të gjithë) */}
+                          <button onClick={() => { setAdjustingProduct(p); setIsAdjustmentModalOpen(true); }} className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm group/btn" title={t.newStock}>
+                            <ArrowUpDown size={16} strokeWidth={2.5} className="group-hover/btn:scale-110 transition-transform" />
+                          </button>
+                          
+                          {/* KËTO BUTONA SHFAQEN VETËM PËR ADMIN */}
+                          {userRole === 'admin' && (
+                            <>
+                              <button onClick={() => { setSelectedProductIdForHistory(p.id); setSelectedProductName(p.name); }} className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm group/btn" title={t.historyTitle}>
+                                <History size={16} strokeWidth={2.5} className="group-hover/btn:scale-110 transition-transform" />
+                              </button>
+                              <button onClick={() => openEditModal(p)} className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all shadow-sm group/btn" title={t.edit}>
+                                <Edit3 size={16} strokeWidth={2.5} className="group-hover/btn:scale-110 transition-transform" />
+                              </button>
+                              <button onClick={() => { setDeleteId(p.id); setDeleteConfirmOpen(true); }} className="p-3 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-red-600 hover:text-white hover:border-red-600 transition-all shadow-sm group/btn" title={t.deleteTitle}>
+                                <Trash2 size={16} strokeWidth={2.5} className="group-hover/btn:scale-110 transition-transform" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
+
                     </tr>
                   );
                 })
@@ -326,20 +586,20 @@ export default function InventoryPage() {
           <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
             <div className="bg-[#1a1a1a] p-8 flex justify-between items-center text-white">
               <div>
-                <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3"><History className="text-red-600" /> Historiku</h2>
+                <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3"><History className="text-red-600" /> {t.historyTitle}</h2>
                 <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">{selectedProductName}</p>
               </div>
               <button onClick={() => setSelectedProductIdForHistory(null)} className="bg-white/5 p-3 rounded-2xl hover:bg-red-600 transition-all"><X size={20} /></button>
             </div>
             <div className="p-8 overflow-y-auto max-h-[60vh]">
-              {isLoadingMovements ? <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-red-600" /></div> : movements.length === 0 ? <div className="p-20 text-center font-black text-slate-300 uppercase text-xs tracking-widest">Nuk ka lëvizje</div> : (
+              {isLoadingMovements ? <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-red-600" /></div> : movements.length === 0 ? <div className="p-20 text-center font-black text-slate-300 uppercase text-xs tracking-widest">{t.noMovements}</div> : (
                 <table className="w-full">
                   <thead>
                     <tr className="text-left border-b border-slate-100 pb-2">
-                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">Data</th>
-                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">Lloji</th>
-                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">Sasia</th>
-                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">Arsyeja</th>
+                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">{t.date}</th>
+                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">{t.type}</th>
+                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">{t.qty}</th>
+                      <th className="pb-4 text-[10px] font-black text-slate-400 uppercase">{t.reason}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -347,9 +607,9 @@ export default function InventoryPage() {
                       <tr key={m.id}>
                         <td className="py-4 text-xs font-bold text-slate-500">{new Date(m.created_at).toLocaleDateString()}</td>
                         <td className="py-4">
-                          {m.type?.toUpperCase() === "IN" ? <span className="text-emerald-600 text-[10px] font-black flex items-center gap-1"><ArrowUpRight size={12} /> HYRJE</span> : <span className="text-red-600 text-[10px] font-black flex items-center gap-1"><ArrowDownRight size={12} /> DALJE</span>}
+                          {m.type?.toUpperCase() === "IN" ? <span className="text-emerald-600 text-[10px] font-black flex items-center gap-1"><ArrowUpRight size={12} /> {t.in}</span> : <span className="text-red-600 text-[10px] font-black flex items-center gap-1"><ArrowDownRight size={12} /> {t.out}</span>}
                         </td>
-                        <td className={`py-4 font-black ${m.type?.toUpperCase() === "IN" ? "text-emerald-600" : "text-red-600"}`}>{m.quantity} CP</td>
+                        <td className={`py-4 font-black ${m.type?.toUpperCase() === "IN" ? "text-emerald-600" : "text-red-600"}`}>{m.quantity} {t.pcs}</td>
                         <td className="py-4 text-[10px] font-bold uppercase text-slate-400 italic">{m.reason}</td>
                       </tr>
                     ))}
@@ -366,80 +626,167 @@ export default function InventoryPage() {
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[130] flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
             <div className="bg-[#1a1a1a] p-8 flex justify-between items-center text-white">
-              <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3"><ArrowUpDown className="text-emerald-500" /> Stok i Ri</h2>
+              <h2 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3"><ArrowUpDown className="text-emerald-500" /> {t.newStock}</h2>
               <button onClick={() => setIsAdjustmentModalOpen(false)} className="bg-white/5 p-3 rounded-2xl hover:bg-red-600 transition-all"><X size={20} /></button>
             </div>
             <form onSubmit={handleAdjustmentSubmit} className="p-8 space-y-6">
               <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
-                <button type="button" onClick={() => handleTypeChange("IN")} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${adjustmentData.type === "IN" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"}`}>Hyrje (+)</button>
-                <button type="button" onClick={() => handleTypeChange("OUT")} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${adjustmentData.type === "OUT" ? "bg-white text-red-600 shadow-sm" : "text-slate-400"}`}>Dalje (-)</button>
+                <button type="button" onClick={() => handleTypeChange("IN")} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${adjustmentData.type === "IN" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"}`}>{t.inPlus}</button>
+                <button type="button" onClick={() => handleTypeChange("OUT")} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${adjustmentData.type === "OUT" ? "bg-white text-red-600 shadow-sm" : "text-slate-400"}`}>{t.outMinus}</button>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase">Sasia</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase">{t.qty}</label>
                 <input required type="number" min="1" placeholder="0" value={adjustmentData.quantity} onChange={(e) => setAdjustmentData({ ...adjustmentData, quantity: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-slate-900 font-black text-xl" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase">Arsyeja</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase">{t.reason}</label>
                 <input required type="text" value={adjustmentData.reason} onChange={(e) => setAdjustmentData({ ...adjustmentData, reason: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-slate-900" />
               </div>
               <button type="submit" disabled={recordMovement.isPending} className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl hover:bg-red-600 transition-all uppercase text-xs tracking-widest flex items-center justify-center gap-3">
-                {recordMovement.isPending ? <Loader2 className="animate-spin" /> : "Përditëso"}
+                {recordMovement.isPending ? <Loader2 className="animate-spin" /> : t.update}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL SHTIM / EDITIM */}
+{/* MODAL SHTIM / EDITIM (VERSIONI PREMIUM PA SCROLL) */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border border-white/10">
-            <div className="bg-[#1a1a1a] p-10 flex justify-between items-center text-white">
-              <div><h2 className="text-2xl font-black uppercase">{editingProduct ? "Edito" : "Shto"} Produkt</h2><p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-1">Detajet e Stokut</p></div>
-              <button onClick={() => setIsModalOpen(false)} className="bg-white/5 p-3 rounded-2xl hover:bg-red-600 transition-all"><X size={24} /></button>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white flex flex-col max-h-[90vh]">
+            
+            {/* Koka e Modalit */}
+            <div className="bg-slate-900 p-6 sm:p-8 flex justify-between items-center text-white relative overflow-hidden flex-shrink-0">
+              <div className="absolute -right-5 -top-10 text-white/5 rotate-12 pointer-events-none">
+                <Package size={120} strokeWidth={1} />
+              </div>
+              <div className="relative z-10">
+                <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter flex items-center gap-3">
+                  {editingProduct ? <Edit3 className="text-red-500" size={24} /> : <Plus className="text-red-500" size={24} />} 
+                  {editingProduct ? t.edit : t.add} Produkt
+                </h2>
+                <p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.3em] mt-1.5">{t.stockDetails}</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="bg-white/10 p-3 rounded-2xl hover:bg-red-600 hover:text-white transition-all relative z-10 group">
+                <X size={20} strokeWidth={3} className="group-hover:rotate-90 transition-transform duration-300" />
+              </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-10 space-y-6 font-bold overflow-y-auto max-h-[70vh]">
-              <div className="grid grid-cols-2 gap-6">
-                <div className="col-span-2 space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Emri</label>
-                  <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all" />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-black text-slate-400 uppercase">Përshkrimi</label>
-                    <button type="button" onClick={generateAIDescription} disabled={isGeneratingAI} className="text-[10px] flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full hover:bg-red-600 transition-all">
-                      {isGeneratingAI ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} AI
-                    </button>
-                  </div>
-                  <textarea rows={3} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all resize-none" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">SKU</label>
-                  <input required type="text" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Kategoria</label>
-                  <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600">
-                    <option>Pajisje</option><option>Softuer</option><option>Aksesorë</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Çmimi</label>
-                  <input required type="number" step="0.01" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Sasia</label>
-                  <input required type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600" />
+
+            {/* Forma (Me overflow-y-auto të fshehur vizualisht, vetëm nëse duhet për ekrane të vogla) */}
+            <form onSubmit={handleSubmit} className="p-6 sm:p-8 flex-1 overflow-y-auto scrollbar-hide bg-white flex flex-col justify-between">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                
+                {/* Rreshti 1: EMRI dhe SKU */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Type size={12} className="text-slate-300" /> {t.name}
+                  </label>
+                  <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-300 font-bold text-slate-800 transition-all shadow-inner text-sm" 
+                    placeholder="Psh. Laptop HP ProBook"
+                  />
                 </div>
 
-                <div className="col-span-2 space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Alarmi për stok të ulët (Limiti manual)</label>
-                  <input required type="number" value={formData.min_stock_level} onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value })} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] outline-none focus:border-red-600 transition-all font-black text-red-600" placeholder="Psh. 2" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Tag size={12} className="text-slate-300" /> SKU (KODI)
+                  </label>
+                  <input required type="text" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-300 font-bold text-slate-800 transition-all shadow-inner uppercase text-sm" 
+                    placeholder="Psh. HP-1234"
+                  />
                 </div>
+
+                {/* Rreshti 2: PËRSHKRIMI (Zë 2 kolona por me lartësi të vogël) */}
+                <div className="sm:col-span-2 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <AlignLeft size={12} className="text-slate-300" /> {t.desc}
+                    </label>
+                    <button type="button" onClick={generateAIDescription} disabled={isGeneratingAI} 
+                      className="text-[9px] flex items-center gap-1.5 bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1.5 rounded-lg font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isGeneratingAI ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} 
+                      {isGeneratingAI ? "Menduar..." : "AI Text"}
+                    </button>
+                  </div>
+                  <textarea rows={2} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-300 font-medium italic text-slate-600 transition-all resize-none shadow-inner text-sm" 
+                    placeholder="Përshkruaj detajet..."
+                  />
+                </div>
+
+                {/* Rreshti 3: KATEGORIA, ÇMIMI dhe SASIA */}
+                <div className="space-y-1.5 relative">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <LayoutGrid size={12} className="text-slate-300" /> {t.category}
+                  </label>
+                  <div className="relative group">
+                    <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} 
+                      className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-300 font-black uppercase text-[11px] tracking-widest text-slate-700 transition-all appearance-none cursor-pointer shadow-inner"
+                    >
+                      <option value={t.equipment}>{t.equipment}</option>
+                      <option value={t.software}>{t.software}</option>
+                      <option value={t.accessories}>{t.accessories}</option>
+                    </select>
+                    <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-red-600 transition-transform duration-300 group-focus-within:-rotate-180" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <DollarSign size={12} className="text-slate-300" /> {t.price}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-sm">€</span>
+                      <input required type="number" step="0.01" min="0" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} 
+                        className="w-full pl-8 pr-3 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-300 font-black text-slate-800 transition-all shadow-inner text-sm" 
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <Hash size={12} className="text-slate-300" /> {t.qty}
+                    </label>
+                    <input required type="number" min="0" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} 
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-300 font-black text-slate-800 transition-all shadow-inner text-sm" 
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                {/* Rreshti 4: ALARMI I STOKUT (I rregulluar kompakt) */}
+                <div className="sm:col-span-2 mt-1 bg-red-50/50 p-4 rounded-2xl border border-red-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                      <AlertTriangle size={14} strokeWidth={3} /> {t.manualLimit}
+                    </label>
+                    <p className="text-[9px] font-bold text-red-400/80 uppercase tracking-widest">
+                      Njofto kur sasia zbret poshtë këtij limiti.
+                    </p>
+                  </div>
+                  <input required type="number" min="0" value={formData.min_stock_level} onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value })} 
+                    className="w-full sm:w-24 px-4 py-2.5 bg-white border border-red-200 rounded-xl outline-none focus:ring-2 focus:ring-red-600/10 focus:border-red-400 font-black text-lg text-red-600 transition-all shadow-inner text-center" 
+                  />
+                </div>
+
               </div>
-              <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="w-full bg-red-600 text-white font-black py-6 rounded-[2rem] hover:bg-slate-900 transition-all uppercase tracking-[0.2em] flex items-center justify-center gap-3">
-                {createMutation.isPending || updateMutation.isPending ? <Loader2 className="animate-spin" /> : <><CheckCircle size={20} /> Ruaj</>}
-              </button>
+
+              {/* BUTONI RUAJ */}
+              <div className="pt-6 mt-auto">
+                <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} 
+                  className="w-full bg-red-600 text-white font-black py-4 rounded-2xl hover:bg-slate-900 transition-all duration-300 uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-[0_4px_20px_rgb(220,38,38,0.3)] hover:shadow-xl active:translate-y-0 disabled:opacity-70 disabled:hover:bg-red-600"
+                >
+                  {createMutation.isPending || updateMutation.isPending ? (
+                    <><Loader2 className="animate-spin" size={20} /> Duke u ruajtur...</>
+                  ) : (
+                    <><CheckCircle size={20} strokeWidth={3} /> {t.save}</>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -450,10 +797,10 @@ export default function InventoryPage() {
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 text-center space-y-6">
             <AlertTriangle className="text-red-600 mx-auto" size={40} />
-            <h3 className="text-2xl font-black uppercase">Fshije?</h3>
+            <h3 className="text-2xl font-black uppercase">{t.deleteTitle}</h3>
             <div className="flex flex-col gap-3">
-              <button onClick={confirmDelete} className="bg-red-600 text-white py-5 rounded-2xl font-black uppercase text-xs">Po, Fshije</button>
-              <button onClick={() => setDeleteConfirmOpen(false)} className="bg-slate-100 text-slate-600 py-5 rounded-2xl font-black uppercase text-xs">Anulo</button>
+              <button onClick={confirmDelete} className="bg-red-600 text-white py-5 rounded-2xl font-black uppercase text-xs">{t.yesDelete}</button>
+              <button onClick={() => setDeleteConfirmOpen(false)} className="bg-slate-100 text-slate-600 py-5 rounded-2xl font-black uppercase text-xs">{t.cancel}</button>
             </div>
           </div>
         </div>
