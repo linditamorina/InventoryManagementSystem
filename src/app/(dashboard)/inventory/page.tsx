@@ -584,7 +584,7 @@ export default function InventoryPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       setIsImporting(false);
-      setImportDone({ ok: 0, fail: validRows.length, reasons: ['Sesioni ka skaduar. Logohu sërish.'] });
+      setImportDone({ ok: 0, fail: validRows.length, skipped: 0, reasons: ['Sesioni ka skaduar. Logohu sërish.'] });
       return;
     }
 

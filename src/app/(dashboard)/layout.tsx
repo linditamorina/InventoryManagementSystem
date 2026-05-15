@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Tag } from 'lucide-react';
+import { LayoutDashboard, Package, Tag, User } from 'lucide-react';
 import Navbar from '../../components/layout/Navbar';
 import InventoryChat from '../../components/chat/InventoryChat';
 import { supabase } from '../../lib/supabase';
@@ -42,7 +42,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link href="/categories" className={`flex items-center gap-4 px-4 py-3 rounded-xl ${pathname === '/categories' ? 'bg-red-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
               <Tag size={20} /> Categories
             </Link>
+            
           )}
+
+           {userRole === 'admin' && (
+            <Link href="/dashboard/staff" className={`flex items-center gap-4 px-4 py-3 rounded-xl ${pathname === '/dashboard/staff' ? 'bg-red-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
+              <User size={20} /> Staff
+          </Link>
+          )}
+
+          
         </nav>
       </aside>
 
