@@ -1,16 +1,20 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { motion, Variants } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Printer, Sparkles, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Download, Sparkles, ArrowUpRight, ArrowDownRight } from 'lucide-react'; // Ndryshuam Printer me Download
 import { useLanguage } from "../../../context/LanguageContext";
+import { useAboutCompany } from "../../../hooks/useAboutCompany";
 
-// Shtojmë fjalorin e përkthimeve lokal ashtu si në faqet e tjera
+// Importet për gjenerimin e PDF
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 const translations = {
   en: {
     title: "Reports & Analytics",
-    print: "Save as PDF",
+    downloadPDF: "Download PDF",
     aiPredictor: "AI Predictor",
     loadingText: "Analyzing data...",
     noData: "No data available for this period.",
@@ -27,7 +31,7 @@ const translations = {
   },
   sq: {
     title: "Raportet & Analitika",
-    print: "Ruaj si PDF",
+    downloadPDF: "Shkarko PDF",
     aiPredictor: "Analisti AI",
     loadingText: "Duke analizuar...",
     noData: "S'ka të dhëna për këtë periudhë.",
@@ -37,7 +41,7 @@ const translations = {
     endDate: "Data Përfundimtare",
     totalIn: "Hyrje Totale",
     totalOut: "Dalje Totale",
-    units: "njësi",
+    units: "CP",
     chartTitle: "Pasqyra e Lëvizjeve të Stokut",
     loading: "Duke ngarkuar...",
     no_data: "Nuk u gjetën lëvizje."
@@ -47,6 +51,9 @@ const translations = {
 export default function ReportsPage() {
   const { language } = useLanguage();
   const t = translations[language as keyof typeof translations] || translations.sq;
+
+  const { aboutCompany } = useAboutCompany();
+  const [currencySymbol, setCurrencySymbol] = useState("€");
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -65,17 +72,29 @@ export default function ReportsPage() {
   ), []);
 
   useEffect(() => {
+    if (aboutCompany?.currency) {
+      const c = aboutCompany.currency.toUpperCase();
+      if (c === 'USD') setCurrencySymbol('$');
+      else if (c === 'EUR') setCurrencySymbol('€');
+      else if (c === 'ALL') setCurrencySymbol('L');
+      else if (c === 'GBP') setCurrencySymbol('£');
+      else setCurrencySymbol(aboutCompany.currency);
+    }
+  }, [aboutCompany]);
+
+  useEffect(() => {
     const fetchRealData = async () => {
       setIsLoading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // KUJDES: Sigurohu që emri i tabelës poshtë është i njëjti ku po ruan historikun
-        // Nëse nuk është 'stock_movements', ndërroje në emrin tënd (psh. 'product_movements')
         const { data, error } = await supabase
-          .from('stock_movements') // Zëvendësuam 'inventory_logs'
-          .select('created_at, type, quantity') // Zëvendësuam action_type dhe quantity_change
+          .from('stock_movements') 
+          .select(`
+            created_at, type, quantity, product_id,
+            products (name, sku, category, price, quantity)
+          `) 
           .gte('created_at', `${startDate}T00:00:00Z`)
           .lte('created_at', `${endDate}T23:59:59Z`);
 
@@ -101,7 +120,6 @@ export default function ReportsPage() {
         groupedData[date] = { name: date, hyrje: 0, dalje: 0 };
       }
       
-      // Krahasimi duhet të bëhet me log.type ('IN' ose 'OUT')
       if (log.type?.toUpperCase() === 'IN') {
         groupedData[date].hyrje += Number(log.quantity);
         hyrjeTotale += Number(log.quantity);
@@ -111,16 +129,132 @@ export default function ReportsPage() {
       }
     });
 
-    return {
-      chartData: Object.values(groupedData),
-      totals: { hyrje: hyrjeTotale, dalje: daljeTotale }
-    };
+    return { chartData: Object.values(groupedData), totals: { hyrje: hyrjeTotale, dalje: daljeTotale } };
   }, [rawData, language]);
 
-  const handlePrint = () => {
-    window.print();
-    // Shënim për ty: Kur hapet dialogu, përdoruesi do të zgjedhë "Save as PDF" si printer
+  const productMovementsSummary = useMemo(() => {
+    const summary: Record<string, any> = {};
+    rawData.forEach((log) => {
+      const prod = Array.isArray(log.products) ? log.products[0] : log.products;
+      if (!prod) return;
+
+      const pId = log.product_id;
+      if (!summary[pId]) {
+        summary[pId] = {
+          sku: prod.sku || 'N/A', name: prod.name || 'Unknown', category: prod.category || 'N/A',
+          price: Number(prod.price || 0), stok: Number(prod.quantity || 0), hyrje: 0, dalje: 0
+        };
+      }
+
+      if (log.type?.toUpperCase() === 'IN') summary[pId].hyrje += Number(log.quantity || 0);
+      else if (log.type?.toUpperCase() === 'OUT') summary[pId].dalje += Number(log.quantity || 0);
+    });
+    return Object.values(summary);
+  }, [rawData]);
+
+  // =======================================================================
+  // LOGJIKA E AVANCUAR E PDF: Gjeneron dhe shkarkon direkt dokumentin!
+  // =======================================================================
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // 1. Koka e Dokumentit (Të dhënat e kompanisë majtas)
+    doc.setFontSize(22);
+    doc.setTextColor(15, 23, 42); // Ngjyrë e errët
+    doc.setFont("helvetica", "bold");
+    doc.text(aboutCompany?.company_name?.toUpperCase() || "EMRI I KOMPANISË", 14, 22);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "normal");
+    doc.text(aboutCompany?.address || "Adresa e panjohur", 14, 30);
+    doc.text(`Tel: ${aboutCompany?.phone || "-"} | Email: ${aboutCompany?.email || "-"}`, 14, 35);
+
+    // 2. Titulli i Raportit dhe Data (Djathtas)
+    doc.setFontSize(14);
+    doc.setTextColor(220, 38, 38); // Ngjyrë e kuqe
+    doc.setFont("helvetica", "bold");
+    doc.text("RAPORTI I INVENTARIT", pageWidth - 14, 22, { align: "right" });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text("PERIUDHA E AUDITIMIT", pageWidth - 14, 30, { align: "right" });
+    
+    doc.setTextColor(15, 23, 42);
+    const dateStr = `${new Date(startDate).toLocaleDateString()}  -  ${new Date(endDate).toLocaleDateString()}`;
+    doc.text(dateStr, pageWidth - 14, 35, { align: "right" });
+
+    // Vija ndarëse e zezë
+    doc.setDrawColor(15, 23, 42);
+    doc.setLineWidth(0.5);
+    doc.line(14, 42, pageWidth - 14, 42);
+
+    // 3. Përmbledhja (Totalet)
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(22, 163, 74); // Jeshile
+    doc.text(`Hyrje Totale: +${totals.hyrje.toLocaleString()} ${t.units}`, 14, 52);
+    
+    doc.setTextColor(220, 38, 38); // E kuqe
+    doc.text(`Dalje Totale: -${totals.dalje.toLocaleString()} ${t.units}`, 80, 52);
+
+    // 4. Ndërtimi i Tabelës automatikisht
+    const tableColumn = ["SKU", "Emri Artikullit", "Kategoria", "Çmimi", "Hyrje (+)", "Dalje (-)", "Stoku Live"];
+    const tableRows: any[] = [];
+
+    if (productMovementsSummary.length === 0) {
+      tableRows.push(["-", "Nuk ka lëvizje për këtë periudhë", "-", "-", "-", "-", "-"]);
+    } else {
+      productMovementsSummary.forEach(item => {
+        tableRows.push([
+          item.sku,
+          item.name,
+          item.category,
+          `${currencySymbol}${item.price.toFixed(2)}`,
+          item.hyrje > 0 ? `+${item.hyrje}` : "0",
+          item.dalje > 0 ? `-${item.dalje}` : "0",
+          `${item.stok} CP`
+        ]);
+      });
+    }
+
+    // Vizatimi i Tabelës
+    autoTable(doc, {
+      startY: 60,
+      head: [tableColumn],
+      body: tableRows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 9, textColor: 50 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        3: { halign: 'right', fontStyle: 'bold' }, // Çmimi
+        4: { halign: 'center', textColor: [22, 163, 74], fontStyle: 'bold' }, // Hyrje (E gjelbër)
+        5: { halign: 'center', textColor: [220, 38, 38], fontStyle: 'bold' }, // Dalje (E kuqe)
+        6: { halign: 'center', fontStyle: 'bold' } // Stoku Live
+      }
+    });
+
+    // 5. Nënshkrimet Zyrtare në fund të faqes
+    const finalY = (doc as any).lastAutoTable.finalY || 60;
+    
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(10);
+    
+    // Nënshkrimi Majtas (Stafi)
+    doc.line(30, finalY + 40, 80, finalY + 40);
+    doc.text("Përgatiti (Stafi)", 55, finalY + 46, { align: "center" });
+
+    // Nënshkrimi Djathtas (Administratori)
+    doc.line(pageWidth - 80, finalY + 40, pageWidth - 30, finalY + 40);
+    doc.text("Aprovoi (Administratori)", pageWidth - 55, finalY + 46, { align: "center" });
+
+    // 6. Shkarkimi Automatik i PDF-së
+    const fileName = `Raporti_Inventarit_${startDate}_${endDate}.pdf`;
+    doc.save(fileName);
   };
+  // =======================================================================
 
   const handleGenerateAISuggestion = async () => {
     if (rawData.length === 0) return;
@@ -148,40 +282,23 @@ export default function ReportsPage() {
   return (
     <div className="w-full min-h-screen flex flex-col p-4 md:p-8 bg-[#fafafa] gap-8 overflow-y-auto">
       
-      {/* CSS për Printimin e Pastër në PDF */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-container, .print-container * {
-            visibility: visible;
-          }
-          .print-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
       {/* Header */}
-      <div className="flex justify-between items-center no-print">
+      <div className="flex justify-between items-center">
         <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter text-slate-900 uppercase">
           {t.title}
         </h1>
-        <button onClick={handlePrint} className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-lg">
-          <Printer size={16} /> {t.print}
+        {/* Butoni tani thërret funksionin që shkarkon direkt PDF-në */}
+        <button 
+          onClick={handleDownloadPDF} 
+          className="flex items-center gap-2 bg-red-600 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-900 shadow-xl transition-all active:scale-95"
+        >
+          <Download size={16} strokeWidth={2.5} /> {t.downloadPDF}
         </button>
       </div>
 
-      <div className="print-container flex flex-col gap-8 w-full">
+      <div className="flex flex-col gap-8 w-full">
         {/* Seksioni i AI */}
-        <div className="w-full bg-white rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden no-print">
+        <div className="w-full bg-white rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
           <div className="p-4 md:p-6 flex flex-col items-center gap-4">
             <div className="flex items-center gap-2">
@@ -210,7 +327,7 @@ export default function ReportsPage() {
 
         {/* Kalendari dhe Totale */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-3 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-6 no-print">
+          <div className="lg:col-span-3 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-6">
             <div className="space-y-2">
                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.startDate}</label>
                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-100 text-sm rounded-xl px-4 py-3 font-bold" />
